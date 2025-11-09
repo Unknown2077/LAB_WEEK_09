@@ -26,6 +26,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.NavType
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.squareup.moshi.Types
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,15 +61,41 @@ data class Student(
 )
 
 @Composable
-fun ResultContent(listData: String) {
-    Column(
+fun ResultContent(jsonData: String) {
+    val moshi = remember {
+        Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
+    }
+    val adapter = remember {
+        val listType = Types.newParameterizedType(List::class.java, Student::class.java)
+        moshi.adapter<List<Student>>(listType)
+    }
+    val studentList = try {
+        adapter.fromJson(jsonData) ?: emptyList()
+    } catch (e: Exception) {
+        emptyList<Student>()
+    }
+
+    LazyColumn(
         modifier = Modifier
             .padding(vertical = 4.dp)
             .fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        //Here, we call the OnBackgroundItemText UI Element
-        OnBackgroundItemText(text = listData)
+        item {
+            OnBackgroundTitleText(text = "Student List")
+        }
+        items(studentList) { student ->
+            Column(
+                modifier = Modifier
+                    .padding(vertical = 4.dp)
+                    .fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                OnBackgroundItemText(text = student.name)
+            }
+        }
     }
 }
 
@@ -89,9 +118,9 @@ fun App(navController: NavHostController) {
         composable("home") {
             //Here, we pass a lambda function that navigates to
             "resultContent"
-            //and pass the listData as a parameter
+            //and pass the jsonData as a parameter
             Home { navController.navigate(
-                "resultContent/?listData=$it")
+                "resultContent/?jsonData=$it")
             }
         }
         //Here, we create a route called "resultContent"
@@ -103,14 +132,14 @@ fun App(navController: NavHostController) {
         //We use navArgument to define the argument
         //We use NavType.StringType to define the type of the argument
         composable(
-            "resultContent/?listData={listData}",
-            arguments = listOf(navArgument("listData") {
+            "resultContent/?jsonData={jsonData}",
+            arguments = listOf(navArgument("jsonData") {
                 type = NavType.StringType }
             )
         ) {
             //Here, we pass the value of the argument to the ResultContent
             ResultContent(
-                it.arguments?.getString("listData").orEmpty()
+                it.arguments?.getString("jsonData").orEmpty()
             )
         }
     }
@@ -122,6 +151,16 @@ fun Home(
 ) {
     val listData = remember { mutableStateListOf<Student>() }
     var inputField by remember { mutableStateOf(Student("")) }
+
+    val moshi = remember {
+        Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
+    }
+    val adapter = remember {
+        val listType = Types.newParameterizedType(List::class.java, Student::class.java)
+        moshi.adapter<List<Student>>(listType)
+    }
 
     //Here, we use LazyColumn to display a list of items lazily
     LazyColumn {
@@ -153,8 +192,8 @@ fun Home(
                                 R.string.button_click
                         )
                     ) {
-                        if (inputField.name.isNotBlank()) {
-                            listData.add(Student(inputField.name))
+                        if (inputField.name.trim().isNotEmpty()) {
+                            listData.add(Student(inputField.name.trim()))
                             inputField = Student("")
                         }
                     }
@@ -164,7 +203,8 @@ fun Home(
                                 R.string.button_navigate
                         )
                     ) {
-                        navigateFromHomeToResult(listData.toList().toString())
+                        val jsonString = adapter.toJson(listData.toList())
+                        navigateFromHomeToResult(jsonString)
                     }
                 }
             }
